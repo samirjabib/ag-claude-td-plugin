@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "type": "module",
   "bin": {
-    "arcticgrey-td-bridge": "./dist/index.js"
+    "arcticgrey-td-bridge": "./dist/index.js",
+    "arcticgrey-td-bridge-setup": "./dist/setup.js"
   },
   "scripts": {
     "build": "tsc",
