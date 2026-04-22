@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "arcticgrey-td-bridge": {
+      "command": "arcticgrey-td-bridge"
+    }
+  }
+}

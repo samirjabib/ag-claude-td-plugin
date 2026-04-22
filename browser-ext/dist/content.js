@@ -17,9 +17,12 @@
     let lastState = isTracking(button);
     const observer = new MutationObserver(() => {
       const current = isTracking(button);
+      console.log("[TD Bridge] class mutation detected, tracking:", current, "lastState:", lastState);
       if (current === lastState) return;
       lastState = current;
-      const ctx = extractTicketContext(getUrl(), button.ownerDocument ?? document);
+      const url = getUrl();
+      const ctx = extractTicketContext(url, button.ownerDocument ?? document);
+      console.log("[TD Bridge] URL:", url, "context:", ctx);
       if (!ctx) return;
       onChange({
         action: current ? "start" : "stop",
@@ -37,6 +40,7 @@
     return document.querySelector(BUTTON_SELECTOR);
   }
   function send(event) {
+    console.log("[TD Bridge] send event:", event.action, event.ticket.ticket_id);
     const message = {
       type: "TD_BRIDGE_EVENT",
       payload: {
@@ -52,11 +56,13 @@
         }
       }
     };
-    chrome.runtime.sendMessage(message).catch(() => {
+    chrome.runtime.sendMessage(message).catch((err) => {
+      console.error("[TD Bridge] sendMessage failed:", err);
     });
   }
   var detach = null;
   function bind(button) {
+    console.log("[TD Bridge] button found, attaching observer");
     detach?.();
     detach = attachObserver(button, () => location.href, send);
   }

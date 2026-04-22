@@ -27,7 +27,18 @@ export interface BridgePayload {
   };
 }
 
-export interface RuntimeMessage {
+export interface BridgeEventMessage {
   type: 'TD_BRIDGE_EVENT';
   payload: BridgePayload;
 }
+
+export interface AuthCheckMessage {
+  type: 'TD_BRIDGE_AUTH_CHECK';
+}
+
+export interface AuthCheckResponse {
+  allowed: boolean;
+  email: string | null;
+}
+
+export type RuntimeMessage = BridgeEventMessage | AuthCheckMessage;

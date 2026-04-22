@@ -1,8 +1,10 @@
 {
-  "name": "td-claude-mcp-server",
+  "name": "arcticgrey-td-bridge",
   "version": "0.0.1",
   "type": "module",
-  "private": true,
+  "bin": {
+    "arcticgrey-td-bridge": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",

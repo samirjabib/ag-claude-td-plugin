@@ -26,9 +26,12 @@ export function attachObserver(
 
   const observer = new MutationObserver(() => {
     const current = isTracking(button);
+    console.log('[TD Bridge] class mutation detected, tracking:', current, 'lastState:', lastState);
     if (current === lastState) return;
     lastState = current;
-    const ctx = extractTicketContext(getUrl(), button.ownerDocument ?? document);
+    const url = getUrl();
+    const ctx = extractTicketContext(url, button.ownerDocument ?? document);
+    console.log('[TD Bridge] URL:', url, 'context:', ctx);
     if (!ctx) return;
     onChange({
       action: current ? 'start' : 'stop',

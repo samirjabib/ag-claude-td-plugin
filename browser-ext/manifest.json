@@ -3,7 +3,7 @@
   "name": "TD Claude Bridge",
   "version": "0.0.1",
   "description": "Bridges Time Doctor 2 timer events on Monday.com to a local Claude MCP server.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "identity", "identity.email"],
   "host_permissions": [
     "*://*.monday.com/*",
     "http://127.0.0.1:47821/*"
