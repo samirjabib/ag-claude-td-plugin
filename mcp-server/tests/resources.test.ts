@@ -56,4 +56,10 @@ describe('Resources', () => {
     expect(list.map((r) => r.uri)).toContain('session://active');
     expect(list.map((r) => r.uri)).toContain('session://11820279584');
   });
+
+  it('returns JSON "null" string for session://active when no active session', async () => {
+    const emptyStore = createStore(':memory:');
+    const handlers = buildResourceHandlers(emptyStore);
+    expect(await handlers.read('session://active')).toBe('null');
+  });
 });
