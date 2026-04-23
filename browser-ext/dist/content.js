@@ -25,17 +25,21 @@
   function attachObserver(button, getUrl, onChange) {
     let lastState = isTracking(button);
     const observer = new MutationObserver(() => {
-      const current = isTracking(button);
-      if (current === lastState) return;
-      lastState = current;
-      const url = getUrl();
-      const ctx = extractTicketContext(url, button.ownerDocument ?? document);
-      if (!ctx) return;
-      onChange({
-        action: current ? "start" : "stop",
-        ticket: ctx,
-        timestamp: Date.now()
-      });
+      try {
+        const current = isTracking(button);
+        if (current === lastState) return;
+        lastState = current;
+        const url = getUrl();
+        const ctx = extractTicketContext(url, button.ownerDocument ?? document);
+        if (!ctx) return;
+        onChange({
+          action: current ? "start" : "stop",
+          ticket: ctx,
+          timestamp: Date.now()
+        });
+      } catch (err) {
+        console.warn("[TD Bridge] observer callback error:", err);
+      }
     });
     observer.observe(button, {
       attributes: true,
