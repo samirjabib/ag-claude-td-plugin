@@ -58,15 +58,32 @@
     }
     return null;
   }
+  function isExtensionAlive() {
+    return typeof chrome !== "undefined" && !!chrome.runtime?.id;
+  }
   function checkAuth() {
     return new Promise((resolve) => {
+      if (!isExtensionAlive()) {
+        resolve({ allowed: false, email: null });
+        return;
+      }
       const msg = { type: "TD_BRIDGE_AUTH_CHECK" };
-      chrome.runtime.sendMessage(msg, (response) => {
-        resolve(response);
-      });
+      try {
+        chrome.runtime.sendMessage(msg, (response) => {
+          resolve(response ?? { allowed: false, email: null });
+        });
+      } catch {
+        resolve({ allowed: false, email: null });
+      }
     });
   }
   function send(event) {
+    if (!isExtensionAlive()) {
+      detach?.();
+      detach = null;
+      boundTo = null;
+      return;
+    }
     const message = {
       type: "TD_BRIDGE_EVENT",
       payload: {
@@ -82,9 +99,13 @@
         }
       }
     };
-    chrome.runtime.sendMessage(message).catch((err) => {
-      console.error("[TD Bridge] sendMessage failed:", err);
-    });
+    try {
+      chrome.runtime.sendMessage(message).catch((err) => {
+        console.warn("[TD Bridge] sendMessage rejected:", err);
+      });
+    } catch (err) {
+      console.warn("[TD Bridge] sendMessage threw:", err);
+    }
   }
   var detach = null;
   var boundTo = null;

@@ -19,16 +19,40 @@ function findButton(): Element | null {
   return null;
 }
 
+// When the extension is reloaded, existing content scripts are orphaned:
+// `chrome.runtime.id` becomes undefined and any sendMessage call throws
+// "Extension context invalidated". Detect the orphan state and bail out
+// cleanly so the page isn't spammed with uncaught errors.
+function isExtensionAlive(): boolean {
+  return typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+}
+
 function checkAuth(): Promise<AuthCheckResponse> {
   return new Promise((resolve) => {
+    if (!isExtensionAlive()) {
+      resolve({ allowed: false, email: null });
+      return;
+    }
     const msg: AuthCheckMessage = { type: 'TD_BRIDGE_AUTH_CHECK' };
-    chrome.runtime.sendMessage(msg, (response: AuthCheckResponse) => {
-      resolve(response);
-    });
+    try {
+      chrome.runtime.sendMessage(msg, (response: AuthCheckResponse) => {
+        resolve(response ?? { allowed: false, email: null });
+      });
+    } catch {
+      resolve({ allowed: false, email: null });
+    }
   });
 }
 
 function send(event: ExtensionEvent): void {
+  if (!isExtensionAlive()) {
+    // Orphaned content script (extension reloaded). Detach and stop
+    // observing so we don't keep throwing on every class mutation.
+    detach?.();
+    detach = null;
+    boundTo = null;
+    return;
+  }
   const message: RuntimeMessage = {
     type: 'TD_BRIDGE_EVENT',
     payload: {
@@ -44,9 +68,13 @@ function send(event: ExtensionEvent): void {
       },
     },
   };
-  chrome.runtime.sendMessage(message).catch((err) => {
-    console.error('[TD Bridge] sendMessage failed:', err);
-  });
+  try {
+    chrome.runtime.sendMessage(message).catch((err) => {
+      console.warn('[TD Bridge] sendMessage rejected:', err);
+    });
+  } catch (err) {
+    console.warn('[TD Bridge] sendMessage threw:', err);
+  }
 }
 
 let detach: (() => void) | null = null;
