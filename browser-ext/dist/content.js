@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   // src/observer.ts
-  var URL_RE = /\/boards\/(\d+)\/views\/(\d+)\/pulses\/(\d+)/;
+  var URL_RE = /\/boards\/(\d+)(?:\/views\/(\d+))?\/pulses\/(\d+)/;
   function isTracking(button) {
     const aria = button.getAttribute("aria-pressed");
     if (aria === "true") return true;
@@ -20,7 +20,7 @@
     const [, board_id, view_id, ticket_id] = m;
     const heading = doc.querySelector('[data-testid="editable-heading"] h2');
     const title = heading?.textContent?.trim() || null;
-    return { ticket_id, board_id, view_id, url, title };
+    return { ticket_id, board_id, view_id: view_id ?? null, url, title };
   }
   function attachObserver(button, getUrl, onChange) {
     let lastState = isTracking(button);

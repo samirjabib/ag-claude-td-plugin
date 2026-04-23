@@ -77,6 +77,18 @@ describe('observer.extractTicketContext', () => {
     const ctx = extractTicketContext('https://x.monday.com/boards/1/views/2/pulses/3', document);
     expect(ctx).toMatchObject({ ticket_id: '3', board_id: '1', view_id: '2', title: null });
   });
+
+  it('accepts URLs without the /views/<id>/ segment (view_id:null)', () => {
+    document.body.innerHTML = '';
+    const url = 'https://arcticgrey.monday.com/boards/18408798425/pulses/11824952538';
+    const ctx = extractTicketContext(url, document);
+    expect(ctx).toMatchObject({
+      ticket_id: '11824952538',
+      board_id: '18408798425',
+      view_id: null,
+      url,
+    });
+  });
 });
 
 describe('observer.attachObserver', () => {
