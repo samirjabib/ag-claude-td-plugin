@@ -15,7 +15,7 @@ import { createCandado } from './candado.js';
 import { createEventQueue } from './event-queue.js';
 import { buildHttpServer } from './http-server.js';
 import { buildNotifications } from './notifications.js';
-import { buildToolHandlers, TOOL_DEFINITIONS } from './tools.js';
+import { buildTools } from './tools.js';
 import { buildResourceHandlers } from './resources.js';
 
 const HTTP_PORT = Number(process.env.TD_BRIDGE_PORT ?? 47821);
@@ -47,22 +47,22 @@ const queue = createEventQueue(async (event) => {
   emitNotification(outcome);
 });
 
-const tools = buildToolHandlers(store);
+const tools = buildTools(store);
 const resources = buildResourceHandlers(store);
 
 mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: TOOL_DEFINITIONS.map((t) => ({ ...t })),
+  tools: tools.definitions.map(({ name, description, inputSchema }) => ({
+    name,
+    description,
+    inputSchema,
+  })),
 }));
 
 mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
-  const name = req.params.name;
   const args = (req.params.arguments ?? {}) as Record<string, unknown>;
-  let result: unknown;
-  if (name === 'get_active_ticket') result = await tools.get_active_ticket(args);
-  else if (name === 'get_session') result = await tools.get_session(args as { ticket_id: string });
-  else if (name === 'list_sessions') result = await tools.list_sessions(args);
-  else throw new Error(`unknown tool: ${name}`);
-  return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+  // The SDK's ServerResult union is a superset of the CallToolResult shape
+  // we return (`{ content: [...] }`); cast is safe per tool-call contract.
+  return tools.dispatch(req.params.name, args) as unknown as never;
 });
 
 mcp.setRequestHandler(ListResourcesRequestSchema, async () => {
@@ -92,8 +92,18 @@ await mcp.connect(transport);
 const httpApp = buildHttpServer((event) => queue.enqueue(event), store);
 await httpApp.listen({ port: HTTP_PORT, host: '127.0.0.1' });
 
-process.on('SIGINT', async () => {
-  await httpApp.close();
-  store.close();
+let shuttingDown = false;
+async function shutdown(signal: NodeJS.Signals) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  try {
+    await httpApp.close();
+    store.close();
+  } catch (err) {
+    console.error(`[td-bridge] shutdown error on ${signal}`, err);
+  }
   process.exit(0);
-});
+}
+
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));

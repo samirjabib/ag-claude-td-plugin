@@ -21,6 +21,16 @@ export function createCandado(store: Store): Candado {
 
         const active = store.getActiveTicket();
 
+        // Monotonic guard: reject events older than the current active session's
+        // start marker. Prevents out-of-order deliveries from reverting state.
+        if (
+          active.ticket_id !== null &&
+          active.since !== null &&
+          event.timestamp < active.since
+        ) {
+          return { kind: 'ignored', reason: 'stale_timestamp' };
+        }
+
         if (event.action === 'start') {
           if (active.ticket_id === event.ticket_id) {
             return { kind: 'ignored', reason: 'duplicate_start' };

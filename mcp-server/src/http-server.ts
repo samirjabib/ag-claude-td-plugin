@@ -1,14 +1,51 @@
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
-import type { IngressEvent } from './types.js';
-
+import type { IngressEvent, SessionRow } from './types.js';
 import type { Store } from './store.js';
 
 export type IngestHandler = (event: IngressEvent) => void;
 
-export function buildHttpServer(onEvent: IngestHandler, store?: Store): FastifyInstance {
-  const app = Fastify({ logger: false });
+export interface ActiveSnapshot {
+  active: boolean;
+  since: number | null;
+  ticket: SessionRow | null;
+}
+
+export function getActiveSnapshot(store: Store): ActiveSnapshot {
+  const active = store.getActiveTicket();
+  if (!active.ticket_id) return { active: false, since: null, ticket: null };
+  return {
+    active: true,
+    since: active.since,
+    ticket: store.getSession(active.ticket_id),
+  };
+}
+
+const eventSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['action', 'ticket_id', 'source', 'timestamp'],
+  properties: {
+    action: { type: 'string', enum: ['start', 'stop'] },
+    ticket_id: { type: 'string', minLength: 1 },
+    source: { type: 'string', enum: ['extension', 'api'] },
+    timestamp: { type: 'number' },
+    metadata: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        title: { type: 'string' },
+        board_id: { type: 'string' },
+        view_id: { type: 'string' },
+        url: { type: 'string' },
+      },
+    },
+  },
+} as const;
+
+export function buildHttpServer(onEvent: IngestHandler, store: Store): FastifyInstance {
+  const app = Fastify({ logger: false, bodyLimit: 2048 });
 
   void app.register(cors, {
     origin: true,
@@ -18,38 +55,10 @@ export function buildHttpServer(onEvent: IngestHandler, store?: Store): FastifyI
 
   app.get('/health', async () => ({ ok: true }));
 
-  app.get('/active', async () => {
-    if (!store) return { active: false };
-    const ticket = store.getActiveTicket();
-    if (!ticket.ticket_id) return { active: false };
-    const session = store.getSession(ticket.ticket_id);
-    return { active: true, since: ticket.since, ticket: session };
-  });
+  app.get('/active', async () => getActiveSnapshot(store));
 
-  app.post('/event', async (req, reply) => {
-    const body = req.body as Partial<IngressEvent> | undefined;
-    if (!body || typeof body !== 'object') {
-      return reply.code(400).send({ error: 'invalid_body' });
-    }
-    if (body.action !== 'start' && body.action !== 'stop') {
-      return reply.code(400).send({ error: 'invalid_action' });
-    }
-    if (typeof body.ticket_id !== 'string' || body.ticket_id.length === 0) {
-      return reply.code(400).send({ error: 'invalid_ticket_id' });
-    }
-    if (body.source !== 'extension') {
-      return reply.code(400).send({ error: 'invalid_source' });
-    }
-    if (typeof body.timestamp !== 'number' || !Number.isFinite(body.timestamp)) {
-      return reply.code(400).send({ error: 'invalid_timestamp' });
-    }
-    const event: IngressEvent = {
-      action: body.action,
-      ticket_id: body.ticket_id,
-      source: body.source,
-      timestamp: body.timestamp,
-      metadata: body.metadata,
-    };
+  app.post('/event', { schema: { body: eventSchema } }, async (req, reply) => {
+    const event = req.body as IngressEvent;
     onEvent(event);
     return reply.code(202).send({ accepted: true });
   });

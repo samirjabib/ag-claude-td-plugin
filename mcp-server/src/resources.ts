@@ -17,9 +17,11 @@ export interface ResourceHandlers {
 
 export function parseResourceUri(uri: string): ResourceUri | null {
   if (uri === 'session://active') return { kind: 'active' };
-  const m = uri.match(/^session:\/\/(.+)$/);
-  if (m && m[1] !== 'active') return { kind: 'by-ticket', ticket_id: m[1] };
-  return null;
+  const m = uri.match(/^session:\/\/([^/]+)$/);
+  if (!m) return null;
+  const id = m[1];
+  if (id === 'active' || id.length === 0) return null;
+  return { kind: 'by-ticket', ticket_id: id };
 }
 
 export function buildResourceHandlers(store: Store): ResourceHandlers {

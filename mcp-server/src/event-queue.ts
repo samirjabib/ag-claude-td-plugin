@@ -2,6 +2,8 @@ import type { IngressEvent } from './types.js';
 
 export interface EventQueueOptions {
   dedupWindowMs?: number;
+  now?: () => number;
+  onError?: (err: unknown, event: IngressEvent) => void;
 }
 
 export interface EventQueue {
@@ -14,7 +16,13 @@ export function createEventQueue(
   opts: EventQueueOptions = {},
 ): EventQueue {
   const dedupWindowMs = opts.dedupWindowMs ?? 5000;
-  const recentKeys = new Map<string, number>(); // key -> firstSeenAt
+  const now = opts.now ?? Date.now;
+  const onError = opts.onError ?? ((err, event) => {
+    // Keep the loop alive; surface the failure for ops visibility.
+    console.error('[td-bridge] event handler failed', { event, err });
+  });
+
+  const recentKeys = new Map<string, number>(); // key -> firstSeenAt (server time)
   const queue: IngressEvent[] = [];
   let running = false;
   let drainResolvers: Array<() => void> = [];
@@ -23,9 +31,9 @@ export function createEventQueue(
     return `${e.source}|${e.action}|${e.ticket_id}`;
   }
 
-  function pruneRecent(now: number) {
+  function pruneRecent(currentTs: number) {
     for (const [key, ts] of recentKeys) {
-      if (now - ts > dedupWindowMs * 2) recentKeys.delete(key);
+      if (currentTs - ts > dedupWindowMs * 2) recentKeys.delete(key);
     }
   }
 
@@ -35,12 +43,17 @@ export function createEventQueue(
     try {
       while (queue.length > 0) {
         const event = queue.shift()!;
+        const serverNow = now();
         const key = dedupKey(event);
         const lastSeen = recentKeys.get(key);
-        if (lastSeen !== undefined && event.timestamp - lastSeen < dedupWindowMs) continue;
-        recentKeys.set(key, event.timestamp);
-        pruneRecent(event.timestamp);
-        await handler(event);
+        if (lastSeen !== undefined && serverNow - lastSeen < dedupWindowMs) continue;
+        recentKeys.set(key, serverNow);
+        pruneRecent(serverNow);
+        try {
+          await handler(event);
+        } catch (err) {
+          onError(err, event);
+        }
       }
     } finally {
       running = false;

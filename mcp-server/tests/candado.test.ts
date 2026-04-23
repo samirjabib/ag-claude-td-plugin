@@ -66,6 +66,21 @@ describe('Candado', () => {
     expect(store.getActiveTicket().ticket_id).toBe('T1');
   });
 
+  it('rejects events older than the active session start (stale_timestamp)', () => {
+    candado.apply(evt({ action: 'start', ticket_id: 'T1', timestamp: 5000 }));
+    const out = candado.apply(evt({ action: 'stop', ticket_id: 'T1', timestamp: 4000 }));
+    expect(out.kind).toBe('ignored');
+    if (out.kind === 'ignored') expect(out.reason).toBe('stale_timestamp');
+    expect(store.getActiveTicket().ticket_id).toBe('T1');
+    expect(store.getSession('T1')?.state).toBe('active');
+  });
+
+  it('accepts equal timestamps at the active threshold', () => {
+    candado.apply(evt({ action: 'start', ticket_id: 'T1', timestamp: 5000 }));
+    const out = candado.apply(evt({ action: 'stop', ticket_id: 'T1', timestamp: 5000 }));
+    expect(out.kind).toBe('stopped');
+  });
+
   it('records every event into tracking_events', () => {
     candado.apply(evt({ action: 'start', ticket_id: 'T1' }));
     candado.apply(evt({ action: 'stop', ticket_id: 'T1', timestamp: 1500 }));
