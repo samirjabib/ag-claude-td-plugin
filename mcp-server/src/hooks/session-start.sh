@@ -1,26 +1,80 @@
 #!/usr/bin/env bash
-# SessionStart hook — checks if TD Bridge has an active ticket
-# Outputs context for Claude to pick up automatically
+# SessionStart hook — renders an ArcticGrey ticket banner BEFORE the user's
+# first prompt using the Claude Code hook JSON `systemMessage` field, which
+# displays the text directly in the UI instead of silently injecting it as
+# context. Also emits `hookSpecificOutput.additionalContext` so Claude is
+# aware of the active ticket.
+DB="$HOME/.td-claude-bridge/state.db"
+[ ! -f "$DB" ] && exit 0
 
-RESPONSE=$(curl -s --connect-timeout 1 --max-time 2 http://127.0.0.1:47821/active 2>/dev/null)
+python3 <<'PY'
+import sqlite3, time, os, json, sys
 
-if [ -z "$RESPONSE" ]; then
-  exit 0  # bridge not running, silent
-fi
+db_path = os.path.expanduser('~/.td-claude-bridge/state.db')
+try:
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        'SELECT ticket_id, since FROM active_ticket WHERE singleton=1'
+    ).fetchone()
+    if not row or not row[0]:
+        sys.exit(0)
+    ticket_id, since = row[0], row[1]
+    sess = conn.execute(
+        'SELECT title, url, created_at FROM sessions WHERE ticket_id=?',
+        (ticket_id,),
+    ).fetchone()
+    conn.close()
+except Exception:
+    sys.exit(0)
 
-ACTIVE=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('active',False))" 2>/dev/null)
+title = (sess[0] if sess else '') or 'untitled'
+url = (sess[1] if sess else '') or ''
+ts = since or (sess[2] if sess else 0) or 0
+if ts > 1e12:
+    ts = ts / 1000
 
-if [ "$ACTIVE" = "True" ]; then
-  TICKET_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['ticket']['ticket_id'])" 2>/dev/null)
-  TITLE=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['ticket'].get('title','') or 'untitled')" 2>/dev/null)
-  URL=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['ticket'].get('url',''))" 2>/dev/null)
-  BOARD=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['ticket'].get('board_id',''))" 2>/dev/null)
+elapsed = max(0, int(time.time()) - int(ts)) if ts else 0
+h, rem = divmod(elapsed, 3600)
+m, _ = divmod(rem, 60)
+parts = []
+if h:
+    parts.append(f'{h}h')
+if m:
+    parts.append(f'{m}m')
+elapsed_str = ' '.join(parts) if parts else '<1m'
 
-  echo "AG Time Tracking active — Ticket #${TICKET_ID}: ${TITLE}"
-  if [ -n "$URL" ]; then
-    echo "Monday URL: ${URL}"
-  fi
-  if [ -n "$BOARD" ]; then
-    echo "Board: ${BOARD}"
-  fi
-fi
+label_lines = [
+    f'  Ticket:   #{ticket_id}',
+    f'  Task:     {title}',
+    f'  Elapsed:  {elapsed_str}',
+]
+if url:
+    label_lines.append(f'  Monday:   {url}')
+
+header = '  ArcticGrey Time Tracking \u2014 ACTIVE'
+inner = max(len(l) for l in label_lines + [header]) + 2
+bar = '\u2500' * inner
+
+body = [
+    f'\u250c{bar}\u2510',
+    f'\u2502{header.ljust(inner)}\u2502',
+    f'\u2502{" " * inner}\u2502',
+]
+for line in label_lines:
+    body.append(f'\u2502{line.ljust(inner)}\u2502')
+body.append(f'\u2514{bar}\u2518')
+
+banner = '\n'.join(body)
+
+payload = {
+    'hookSpecificOutput': {
+        'hookEventName': 'SessionStart',
+        'additionalContext': (
+            f'Active Monday ticket: #{ticket_id} - {title}. '
+            f'Elapsed {elapsed_str}. URL: {url}'
+        ),
+    },
+    'systemMessage': banner,
+}
+print(json.dumps(payload))
+PY
