@@ -23,7 +23,7 @@ export function buildHttpServer(onEvent: IngestHandler, store?: Store): FastifyI
     const ticket = store.getActiveTicket();
     if (!ticket.ticket_id) return { active: false };
     const session = store.getSession(ticket.ticket_id);
-    return { active: true, ticket: session };
+    return { active: true, since: ticket.since, ticket: session };
   });
 
   app.post('/event', async (req, reply) => {

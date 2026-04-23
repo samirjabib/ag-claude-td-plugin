@@ -17,7 +17,6 @@ import { buildHttpServer } from './http-server.js';
 import { buildNotifications } from './notifications.js';
 import { buildToolHandlers, TOOL_DEFINITIONS } from './tools.js';
 import { buildResourceHandlers } from './resources.js';
-import { createDesktopWatcher } from './desktop-watcher.js';
 
 const HTTP_PORT = Number(process.env.TD_BRIDGE_PORT ?? 47821);
 const DB_DIR = join(homedir(), '.td-claude-bridge');
@@ -93,11 +92,7 @@ await mcp.connect(transport);
 const httpApp = buildHttpServer((event) => queue.enqueue(event), store);
 await httpApp.listen({ port: HTTP_PORT, host: '127.0.0.1' });
 
-const desktopWatcher = createDesktopWatcher((event) => queue.enqueue(event));
-desktopWatcher.start();
-
 process.on('SIGINT', async () => {
-  desktopWatcher.stop();
   await httpApp.close();
   store.close();
   process.exit(0);
