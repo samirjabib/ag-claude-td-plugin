@@ -1,0 +1,16 @@
+node_modules/
+*.log
+.env
+.env.*
+*.local
+
+# mcp-server build output
+mcp-server/dist/
+
+# browser-ext: keep dist/ tracked (shipped extension), but ignore compiled JS in src/tests and zip artifacts
+browser-ext/src/*.js
+browser-ext/tests/*.js
+browser-ext/*.zip
+
+# local scratch
+docs/superpowers/

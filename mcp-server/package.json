@@ -1,0 +1,30 @@
+{
+  "name": "arcticgrey-td-bridge",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": {
+    "arcticgrey-td-bridge": "./dist/index.js",
+    "arcticgrey-td-bridge-setup": "./dist/setup.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "node dist/index.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.1.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "better-sqlite3": "^11.0.0",
+    "fastify": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  }
+}
