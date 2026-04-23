@@ -1,6 +1,6 @@
 export type TrackingAction = 'start' | 'stop';
 export type SessionState = 'active' | 'paused' | 'archived';
-export type EventSource = 'extension' | 'api' | 'manual';
+export type EventSource = 'extension' | 'desktop' | 'api' | 'manual';
 
 export interface IngressEvent {
   action: TrackingAction;

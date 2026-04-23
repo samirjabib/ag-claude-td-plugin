@@ -3,9 +3,11 @@ import type { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import type { IngressEvent } from './types.js';
 
+import type { Store } from './store.js';
+
 export type IngestHandler = (event: IngressEvent) => void;
 
-export function buildHttpServer(onEvent: IngestHandler): FastifyInstance {
+export function buildHttpServer(onEvent: IngestHandler, store?: Store): FastifyInstance {
   const app = Fastify({ logger: false });
 
   void app.register(cors, {
@@ -15,6 +17,14 @@ export function buildHttpServer(onEvent: IngestHandler): FastifyInstance {
   });
 
   app.get('/health', async () => ({ ok: true }));
+
+  app.get('/active', async () => {
+    if (!store) return { active: false };
+    const ticket = store.getActiveTicket();
+    if (!ticket.ticket_id) return { active: false };
+    const session = store.getSession(ticket.ticket_id);
+    return { active: true, ticket: session };
+  });
 
   app.post('/event', async (req, reply) => {
     const body = req.body as Partial<IngressEvent> | undefined;

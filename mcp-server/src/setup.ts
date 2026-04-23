@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { homedir, platform } from 'node:os';
 import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const PACKAGE_NAME = 'arcticgrey-td-bridge';
 const CHROME_STORE_URL = 'https://chrome.google.com/webstore/detail/PLACEHOLDER_ID'; // TODO: replace after publishing
@@ -81,6 +82,60 @@ function openUrl(url: string): void {
   }
 }
 
+function installHook(): void {
+  const hookDir = join(homedir(), '.claude', 'hooks');
+  mkdirSync(hookDir, { recursive: true });
+
+  const hookDest = join(hookDir, 'ag-td-session-start.sh');
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const hookSrc = join(__dirname, 'hooks', 'session-start.sh');
+
+  if (existsSync(hookSrc)) {
+    copyFileSync(hookSrc, hookDest);
+    execSync(`chmod +x "${hookDest}"`);
+  } else {
+    // Inline the hook if source not found (npm install scenario)
+    const hookScript = `#!/usr/bin/env bash
+RESPONSE=$(curl -s --connect-timeout 1 --max-time 2 http://127.0.0.1:47821/active 2>/dev/null)
+[ -z "$RESPONSE" ] && exit 0
+ACTIVE=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('active',False))" 2>/dev/null)
+if [ "$ACTIVE" = "True" ]; then
+  TICKET_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['ticket']['ticket_id'])" 2>/dev/null)
+  TITLE=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['ticket'].get('title','') or 'untitled')" 2>/dev/null)
+  URL=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['ticket'].get('url',''))" 2>/dev/null)
+  echo "AG Time Tracking active — Ticket #\${TICKET_ID}: \${TITLE}"
+  [ -n "$URL" ] && echo "Monday URL: \${URL}"
+fi
+`;
+    writeFileSync(hookDest, hookScript);
+    execSync(`chmod +x "${hookDest}"`);
+  }
+
+  // Add hook to Claude Code settings
+  const settingsPath = getClaudeCodeSettingsPath();
+  const settings = readJsonFile(settingsPath) as Record<string, unknown>;
+
+  type HookEntry = { hooks: Array<{ type: string; command: string }> };
+  const hooks = (settings.hooks ?? {}) as Record<string, HookEntry[]>;
+  if (!hooks.SessionStart) hooks.SessionStart = [];
+
+  const hookCmd = `bash "${hookDest}"`;
+  const alreadyInstalled = hooks.SessionStart.some(
+    (h) => h.hooks?.some((hh) => hh.command.includes('ag-td-session-start'))
+  );
+
+  if (alreadyInstalled) {
+    console.log('  [skip] Hook already installed');
+  } else {
+    hooks.SessionStart.push({
+      hooks: [{ type: 'command', command: hookCmd }],
+    });
+    settings.hooks = hooks;
+    writeJsonFile(settingsPath, settings);
+    console.log(`  [done] Hook installed at ${hookDest}`);
+  }
+}
+
 function run(): void {
   console.log('\n🔧 ArcticGrey TD Bridge — Setup\n');
 
@@ -94,7 +149,11 @@ function run(): void {
   const codePath = getClaudeCodeSettingsPath();
   configureMcp(codePath, 'Claude Code');
 
-  // 3. Chrome extension
+  // 3. SessionStart hook for Claude Code
+  console.log('\n3. Claude Code SessionStart hook:');
+  installHook();
+
+  // 4. Chrome extension
   console.log('\n3. Chrome Extension:');
   if (CHROME_STORE_URL.includes('PLACEHOLDER')) {
     console.log('  [pending] Extension not yet published to Chrome Web Store');
