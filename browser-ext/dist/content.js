@@ -104,6 +104,7 @@
       }
     };
     try {
+      console.log("[TD Bridge]", event.action, "ticket", event.ticket.ticket_id, event.ticket.title);
       chrome.runtime.sendMessage(message).catch((err) => {
         console.warn("[TD Bridge] sendMessage rejected:", err);
       });
@@ -118,6 +119,7 @@
     detach?.();
     boundTo = button;
     detach = attachObserver(button, () => location.href, send);
+    console.log("[TD Bridge] observer attached to TD button");
   }
   function watchForButton() {
     const existing = findButton();
@@ -134,6 +136,7 @@
       console.warn("[TD Bridge] inactive: email", auth.email || "(empty)", "not @arcticgrey.com");
       return;
     }
+    console.log("[TD Bridge] authorized as", auth.email, "\u2014 watching for TD button");
     watchForButton();
   }
   init();

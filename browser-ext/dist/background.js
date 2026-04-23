@@ -22,6 +22,7 @@ async function forward(payload) {
       console.warn("[td-bridge] bridge replied", res.status);
       return { ok: false, status: res.status };
     }
+    console.log("[td-bridge] forwarded event \u2192 202");
     return { ok: true, status: res.status };
   } catch (err) {
     console.warn("[td-bridge] could not reach bridge:", err);

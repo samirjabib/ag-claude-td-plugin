@@ -69,6 +69,7 @@ function send(event: ExtensionEvent): void {
     },
   };
   try {
+    console.log('[TD Bridge]', event.action, 'ticket', event.ticket.ticket_id, event.ticket.title);
     chrome.runtime.sendMessage(message).catch((err) => {
       console.warn('[TD Bridge] sendMessage rejected:', err);
     });
@@ -85,6 +86,7 @@ function bind(button: Element): void {
   detach?.();
   boundTo = button;
   detach = attachObserver(button, () => location.href, send);
+  console.log('[TD Bridge] observer attached to TD button');
 }
 
 function watchForButton(): void {
@@ -104,6 +106,7 @@ async function init(): Promise<void> {
     console.warn('[TD Bridge] inactive: email', auth.email || '(empty)', 'not @arcticgrey.com');
     return;
   }
+  console.log('[TD Bridge] authorized as', auth.email, '— watching for TD button');
   watchForButton();
 }
 
