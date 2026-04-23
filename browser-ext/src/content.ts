@@ -1,10 +1,22 @@
 import { attachObserver } from './observer.js';
 import type { ExtensionEvent, RuntimeMessage, AuthCheckMessage, AuthCheckResponse } from './types.js';
 
-const BUTTON_SELECTOR = '[data-testid="timedoctor-button"]';
+// Ordered from most-specific to least. The first match wins; the observer
+// itself is resilient to label/class renames, so the extra candidates only
+// have to locate the button, not decode its state.
+const BUTTON_SELECTORS = [
+  '[data-testid="timedoctor-button"]',
+  'button.timedoctor2',
+  'button[aria-label*="time doctor" i]',
+  'button[title*="time doctor" i]',
+];
 
 function findButton(): Element | null {
-  return document.querySelector(BUTTON_SELECTOR);
+  for (const sel of BUTTON_SELECTORS) {
+    const el = document.querySelector(sel);
+    if (el) return el;
+  }
+  return null;
 }
 
 function checkAuth(): Promise<AuthCheckResponse> {
@@ -17,7 +29,6 @@ function checkAuth(): Promise<AuthCheckResponse> {
 }
 
 function send(event: ExtensionEvent): void {
-  console.log('[TD Bridge] send event:', event.action, event.ticket.ticket_id);
   const message: RuntimeMessage = {
     type: 'TD_BRIDGE_EVENT',
     payload: {
@@ -39,25 +50,22 @@ function send(event: ExtensionEvent): void {
 }
 
 let detach: (() => void) | null = null;
+let boundTo: Element | null = null;
 
 function bind(button: Element): void {
-  console.log('[TD Bridge] button found, attaching observer');
+  if (boundTo === button) return;
   detach?.();
+  boundTo = button;
   detach = attachObserver(button, () => location.href, send);
 }
 
 function watchForButton(): void {
   const existing = findButton();
-  if (existing) {
-    bind(existing);
-    return;
-  }
+  if (existing) bind(existing);
+
   const docObserver = new MutationObserver(() => {
     const btn = findButton();
-    if (btn) {
-      docObserver.disconnect();
-      bind(btn);
-    }
+    if (btn && btn !== boundTo) bind(btn);
   });
   docObserver.observe(document.body, { childList: true, subtree: true });
 }
@@ -68,7 +76,6 @@ async function init(): Promise<void> {
     console.warn('[TD Bridge] inactive: email', auth.email || '(empty)', 'not @arcticgrey.com');
     return;
   }
-  console.log('[TD Bridge] authorized:', auth.email);
   watchForButton();
 }
 

@@ -31,6 +31,26 @@ describe('observer.isTracking', () => {
   it('false when tracking-active class absent', () => {
     expect(isTracking(makeButton(false))).toBe(false);
   });
+  it('prefers aria-pressed=true over class signals', () => {
+    const btn = makeButton(false);
+    btn.setAttribute('aria-pressed', 'true');
+    expect(isTracking(btn)).toBe(true);
+  });
+  it('prefers aria-pressed=false over class signals', () => {
+    const btn = makeButton(true);
+    btn.setAttribute('aria-pressed', 'false');
+    expect(isTracking(btn)).toBe(false);
+  });
+  it('honours data-state=active when no aria-pressed is present', () => {
+    const btn = document.createElement('button');
+    btn.setAttribute('data-state', 'active');
+    expect(isTracking(btn)).toBe(true);
+  });
+  it('honours data-state=paused when no aria-pressed is present', () => {
+    const btn = document.createElement('button');
+    btn.setAttribute('data-state', 'paused');
+    expect(isTracking(btn)).toBe(false);
+  });
 });
 
 describe('observer.extractTicketContext', () => {
@@ -97,6 +117,23 @@ describe('observer.attachObserver', () => {
     detach();
   });
 
+  it('fires onChange when aria-pressed flips even without class changes', async () => {
+    document.body.innerHTML = '';
+    const btn = document.createElement('button');
+    btn.setAttribute('aria-pressed', 'false');
+    document.body.appendChild(btn);
+    document.body.appendChild(makeHeading('Task A'));
+
+    const handler = vi.fn();
+    const detach = attachObserver(btn, () => 'https://x.monday.com/boards/1/views/2/pulses/3', handler);
+
+    btn.setAttribute('aria-pressed', 'true');
+    await vi.waitFor(() => expect(handler).toHaveBeenCalled());
+
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ action: 'start' }));
+    detach();
+  });
+
   it('does not fire on no-op class mutations', async () => {
     document.body.innerHTML = '';
     const btn = makeButton(false);
@@ -107,7 +144,6 @@ describe('observer.attachObserver', () => {
     const detach = attachObserver(btn, () => 'https://x.monday.com/boards/1/views/2/pulses/3', handler);
 
     btn.classList.add('some-other-class');
-    // MutationObserver is microtask-scheduled; flush twice and assert.
     await Promise.resolve();
     await Promise.resolve();
 
