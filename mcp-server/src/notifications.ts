@@ -1,12 +1,17 @@
 import type { CandadoOutcome } from './types.js';
 
 export type NotificationSender = (method: string, params: Record<string, unknown>) => void;
+export type NotificationLevel = 'info' | 'warning' | 'error';
 
 const ACTIVE_URI = 'session://active';
 
-function logEvent(send: NotificationSender, data: Record<string, unknown>): void {
+export function sendBridgeMessage(
+  send: NotificationSender,
+  level: NotificationLevel,
+  data: Record<string, unknown>,
+): void {
   send('notifications/message', {
-    level: 'info',
+    level,
     logger: 'td-bridge',
     data,
   });
@@ -14,13 +19,19 @@ function logEvent(send: NotificationSender, data: Record<string, unknown>): void
 
 export function buildNotifications(send: NotificationSender) {
   return function emit(outcome: CandadoOutcome): void {
-    if (outcome.kind === 'ignored') return;
+    if (outcome.kind === 'ignored') {
+      sendBridgeMessage(send, 'warning', {
+        event: 'tracking_ignored',
+        reason: outcome.reason,
+      });
+      return;
+    }
 
     if (outcome.kind === 'started') {
       send('notifications/resources/list_changed', {});
       send('notifications/resources/updated', { uri: ACTIVE_URI });
       send('notifications/resources/updated', { uri: `session://${outcome.ticket_id}` });
-      logEvent(send, {
+      sendBridgeMessage(send, 'info', {
         event: 'tracking_started',
         ticket_id: outcome.ticket_id,
         session_id: outcome.session.session_id,
@@ -33,7 +44,7 @@ export function buildNotifications(send: NotificationSender) {
     if (outcome.kind === 'stopped') {
       send('notifications/resources/updated', { uri: ACTIVE_URI });
       send('notifications/resources/updated', { uri: `session://${outcome.ticket_id}` });
-      logEvent(send, {
+      sendBridgeMessage(send, 'info', {
         event: 'tracking_stopped',
         ticket_id: outcome.ticket_id,
         session_id: outcome.session.session_id,
@@ -45,7 +56,7 @@ export function buildNotifications(send: NotificationSender) {
       send('notifications/resources/updated', { uri: ACTIVE_URI });
       send('notifications/resources/updated', { uri: `session://${outcome.from}` });
       send('notifications/resources/updated', { uri: `session://${outcome.to}` });
-      logEvent(send, {
+      sendBridgeMessage(send, 'info', {
         event: 'tracking_switched',
         from_ticket: outcome.from,
         to_ticket: outcome.to,

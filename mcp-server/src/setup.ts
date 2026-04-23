@@ -13,6 +13,12 @@ interface McpConfig {
   [key: string]: unknown;
 }
 
+interface LaunchConfig {
+  command: string;
+  args: string[];
+  source: 'local' | 'npx';
+}
+
 function getClaudeDesktopConfigPath(): string {
   const os = platform();
   if (os === 'darwin') {
@@ -52,7 +58,30 @@ function getNpxPath(): string {
   }
 }
 
-function configureMcp(configPath: string, label: string): boolean {
+export function resolveMcpLaunch(baseDir = dirname(fileURLToPath(import.meta.url))): LaunchConfig {
+  const entryCandidates = [
+    join(baseDir, 'index.js'),
+    join(baseDir, '..', 'dist', 'index.js'),
+  ];
+
+  for (const entry of entryCandidates) {
+    if (existsSync(entry)) {
+      return {
+        command: process.execPath,
+        args: [entry],
+        source: 'local',
+      };
+    }
+  }
+
+  return {
+    command: getNpxPath(),
+    args: ['-y', PACKAGE_NAME],
+    source: 'npx',
+  };
+}
+
+export function configureMcp(configPath: string, label: string, launch = resolveMcpLaunch()): boolean {
   const config = readJsonFile(configPath) as McpConfig;
   if (!config.mcpServers) config.mcpServers = {};
 
@@ -62,11 +91,14 @@ function configureMcp(configPath: string, label: string): boolean {
   }
 
   config.mcpServers[PACKAGE_NAME] = {
-    command: getNpxPath(),
-    args: ['-y', PACKAGE_NAME],
+    command: launch.command,
+    args: launch.args,
   };
 
   writeJsonFile(configPath, config);
+  if (launch.source === 'npx') {
+    console.log(`  [warn] ${label} — local bridge binary not found, falling back to ${launch.command} ${launch.args.join(' ')}`);
+  }
   console.log(`  [done] ${label} — configured at ${configPath}`);
   return true;
 }
@@ -203,18 +235,19 @@ PY
   }
 }
 
-function run(): void {
+export function run(): void {
   console.log('\n🔧 ArcticGrey TD Bridge — Setup\n');
+  const launch = resolveMcpLaunch();
 
   // 1. Configure Claude Desktop
   console.log('1. Claude Desktop:');
   const desktopPath = getClaudeDesktopConfigPath();
-  configureMcp(desktopPath, 'Claude Desktop');
+  configureMcp(desktopPath, 'Claude Desktop', launch);
 
   // 2. Configure Claude Code
   console.log('\n2. Claude Code:');
   const codePath = getClaudeCodeSettingsPath();
-  configureMcp(codePath, 'Claude Code');
+  configureMcp(codePath, 'Claude Code', launch);
 
   // 3. SessionStart hook for Claude Code
   console.log('\n3. Claude Code SessionStart hook:');
@@ -233,4 +266,6 @@ function run(): void {
   console.log('\n✅ Setup complete. Restart Claude Desktop / Claude Code to activate.\n');
 }
 
-run();
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  run();
+}

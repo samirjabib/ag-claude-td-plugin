@@ -1,4 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import { createStore, Store } from '../src/store.js';
 
 describe('Store', () => {
@@ -80,5 +84,52 @@ describe('Store sessions', () => {
 
   it('records events', () => {
     expect(() => store.recordEvent('T1', 'start', 'extension', 100, '{}')).not.toThrow();
+  });
+
+  it('persists ignored reasons and exposes aggregate stats', () => {
+    const id = store.recordEvent('T1', 'start', 'extension', 100, '{}');
+    store.setEventReason(id, 'duplicate_start');
+    expect(store.listEvents()[0]).toMatchObject({ reason: 'duplicate_start' });
+    expect(store.getIgnoredStats()).toEqual([{ reason: 'duplicate_start', count: 1 }]);
+  });
+
+  it('migrates legacy databases to the latest schema version', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'td-bridge-store-'));
+    const path = join(dir, 'state.db');
+    const legacy = new Database(path);
+    legacy.exec(`
+      CREATE TABLE active_ticket (
+        singleton  INTEGER PRIMARY KEY DEFAULT 1 CHECK (singleton = 1),
+        ticket_id  TEXT,
+        since      INTEGER
+      );
+      INSERT INTO active_ticket (singleton, ticket_id, since) VALUES (1, NULL, NULL);
+      CREATE TABLE sessions (
+        ticket_id       TEXT PRIMARY KEY,
+        session_id      TEXT NOT NULL UNIQUE,
+        title           TEXT,
+        board_id        TEXT,
+        url             TEXT,
+        state           TEXT NOT NULL CHECK (state IN ('active','paused','archived')),
+        created_at      INTEGER NOT NULL,
+        last_active_at  INTEGER NOT NULL
+      );
+      CREATE TABLE tracking_events (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticket_id   TEXT NOT NULL,
+        action      TEXT NOT NULL,
+        source      TEXT NOT NULL,
+        timestamp   INTEGER NOT NULL,
+        meta        TEXT
+      );
+      INSERT INTO tracking_events (ticket_id, action, source, timestamp, meta)
+      VALUES ('T1', 'start', 'extension', 100, '{}');
+    `);
+    legacy.close();
+
+    const reopened = createStore(path);
+    expect(reopened.listEvents()[0]).toMatchObject({ reason: null });
+    reopened.close();
+    rmSync(dir, { recursive: true, force: true });
   });
 });

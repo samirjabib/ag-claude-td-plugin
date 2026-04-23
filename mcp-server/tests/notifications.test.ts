@@ -71,10 +71,16 @@ describe('Notifications (spec-compliant)', () => {
     );
   });
 
-  it('does not emit for ignored outcome', () => {
+  it('emits warning log for ignored outcome', () => {
     const send = vi.fn();
     const emit = buildNotifications(send);
     emit({ kind: 'ignored', reason: 'duplicate_start' });
-    expect(send).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      'notifications/message',
+      expect.objectContaining({
+        level: 'warning',
+        data: expect.objectContaining({ event: 'tracking_ignored', reason: 'duplicate_start' }),
+      }),
+    );
   });
 });

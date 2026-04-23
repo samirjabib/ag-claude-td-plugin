@@ -10,6 +10,7 @@ export interface IngressEvent {
   ticket_id: string;
   source: EventSource;
   timestamp: number;
+  request_id?: string;
   metadata?: {
     title?: string;
     board_id?: string;

@@ -1,5 +1,5 @@
 import type { Store } from './store.js';
-import type { SessionRow } from './types.js';
+import type { IgnoredReason, SessionRow } from './types.js';
 
 export interface ToolResult {
   content: Array<{ type: 'text'; text: string }>;
@@ -39,6 +39,7 @@ export interface Tools {
     get_active_ticket(): Promise<SessionRow | null>;
     get_session(args: { ticket_id: string }): Promise<SessionRow | null>;
     list_sessions(): Promise<SessionRow[]>;
+    get_ignored_stats(): Promise<Array<{ reason: IgnoredReason; count: number }>>;
   };
 }
 
@@ -54,6 +55,9 @@ export function buildTools(store: Store): Tools {
     },
     async list_sessions(): Promise<SessionRow[]> {
       return store.listSessions();
+    },
+    async get_ignored_stats(): Promise<Array<{ reason: IgnoredReason; count: number }>> {
+      return store.getIgnoredStats();
     },
   };
 
@@ -80,6 +84,12 @@ export function buildTools(store: Store): Tools {
       description: 'Returns all sessions ordered by last activity desc.',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       handler: async () => text(await raw.list_sessions()),
+    },
+    {
+      name: 'get_ignored_stats',
+      description: 'Returns aggregate counts of ignored tracking events by reason.',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      handler: async () => text(await raw.get_ignored_stats()),
     },
   ];
 
@@ -118,6 +128,11 @@ export const TOOL_DEFINITIONS = (() => {
     {
       name: 'list_sessions',
       description: 'Returns all sessions ordered by last activity desc.',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    },
+    {
+      name: 'get_ignored_stats',
+      description: 'Returns aggregate counts of ignored tracking events by reason.',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     },
   ] as const;

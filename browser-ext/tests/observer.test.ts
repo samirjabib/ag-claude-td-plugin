@@ -72,6 +72,25 @@ describe('observer.extractTicketContext', () => {
     expect(extractTicketContext('https://arcticgrey.monday.com/boards/9515259371/views/202104545', document)).toBeNull();
   });
 
+  it('falls back to DOM data attributes when /pulses/ disappears from the URL', () => {
+    document.body.innerHTML = '';
+    const btn = makeButton(false);
+    const wrap = document.createElement('div');
+    wrap.setAttribute('data-pulse-id', '11820279584');
+    wrap.appendChild(btn);
+    document.body.appendChild(wrap);
+    document.body.appendChild(makeHeading('AI-TESTING BILLING TOKEN'));
+
+    const ctx = extractTicketContext('https://arcticgrey.monday.com/boards/9515259371', document, btn);
+    expect(ctx).toEqual({
+      ticket_id: '11820279584',
+      board_id: '9515259371',
+      view_id: null,
+      url: 'https://arcticgrey.monday.com/boards/9515259371',
+      title: 'AI-TESTING BILLING TOKEN',
+    });
+  });
+
   it('handles missing title gracefully (returns title:null)', () => {
     document.body.innerHTML = '';
     const ctx = extractTicketContext('https://x.monday.com/boards/1/views/2/pulses/3', document);

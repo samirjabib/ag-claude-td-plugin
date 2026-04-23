@@ -8,10 +8,10 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["storage", "identity", "identity.email"],
+  "permissions": ["storage", "identity", "identity.email", "alarms"],
   "host_permissions": [
     "*://*.monday.com/*",
-    "http://127.0.0.1:47821/*"
+    "http://127.0.0.1/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -22,7 +22,7 @@
       "matches": ["*://*.monday.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle",
-      "all_frames": false
+      "all_frames": true
     }
   ]
 }
