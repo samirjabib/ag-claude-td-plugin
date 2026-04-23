@@ -37,24 +37,40 @@ export function attachObserver(
   onChange: ObserverCallback,
 ): () => void {
   let lastState = isTracking(button);
+  console.log(
+    '[TD Bridge] attached observer, initial state=', lastState,
+    'class=', button.className,
+    'aria-pressed=', button.getAttribute('aria-pressed'),
+    'data-state=', button.getAttribute('data-state'),
+  );
 
-  const observer = new MutationObserver(() => {
+  const observer = new MutationObserver((mutations) => {
     try {
       const current = isTracking(button);
+      const changedAttrs = mutations.map((m) => m.attributeName).filter(Boolean);
+      console.log(
+        '[TD Bridge] mutation — attrs changed:', changedAttrs,
+        'isTracking:', current,
+        'lastState:', lastState,
+        'class:', button.className,
+        'aria-pressed:', button.getAttribute('aria-pressed'),
+      );
       if (current === lastState) return;
       lastState = current;
       const url = getUrl();
       const ctx = extractTicketContext(url, button.ownerDocument ?? document);
-      if (!ctx) return;
+      if (!ctx) {
+        console.warn('[TD Bridge] URL did not match /pulses/ regex:', url);
+        return;
+      }
       onChange({
         action: current ? 'start' : 'stop',
         ticket: ctx,
         timestamp: Date.now(),
       });
     } catch (err) {
-      // Any failure here (orphaned runtime, DOM race) must not propagate;
-      // MutationObserver callbacks that throw are silenced by the browser
-      // but surface as uncaught errors in the page's console.
+      // MutationObserver callbacks that throw get silenced by the browser
+      // but surface as uncaught errors in the page console.
       console.warn('[TD Bridge] observer callback error:', err);
     }
   });

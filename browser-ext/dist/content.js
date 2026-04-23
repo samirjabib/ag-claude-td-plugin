@@ -24,14 +24,40 @@
   }
   function attachObserver(button, getUrl, onChange) {
     let lastState = isTracking(button);
-    const observer = new MutationObserver(() => {
+    console.log(
+      "[TD Bridge] attached observer, initial state=",
+      lastState,
+      "class=",
+      button.className,
+      "aria-pressed=",
+      button.getAttribute("aria-pressed"),
+      "data-state=",
+      button.getAttribute("data-state")
+    );
+    const observer = new MutationObserver((mutations) => {
       try {
         const current = isTracking(button);
+        const changedAttrs = mutations.map((m) => m.attributeName).filter(Boolean);
+        console.log(
+          "[TD Bridge] mutation \u2014 attrs changed:",
+          changedAttrs,
+          "isTracking:",
+          current,
+          "lastState:",
+          lastState,
+          "class:",
+          button.className,
+          "aria-pressed:",
+          button.getAttribute("aria-pressed")
+        );
         if (current === lastState) return;
         lastState = current;
         const url = getUrl();
         const ctx = extractTicketContext(url, button.ownerDocument ?? document);
-        if (!ctx) return;
+        if (!ctx) {
+          console.warn("[TD Bridge] URL did not match /pulses/ regex:", url);
+          return;
+        }
         onChange({
           action: current ? "start" : "stop",
           ticket: ctx,
