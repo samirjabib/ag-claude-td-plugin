@@ -1,3 +1,6 @@
+// Kept in sync manually with mcp-server/src/types.ts. BridgePayload below must
+// satisfy the IngressEvent shape on the server side; if you change either,
+// update both files.
 export type TrackingAction = 'start' | 'stop';
 
 export interface TicketContext {

@@ -1,6 +1,9 @@
+// Kept in sync manually with browser-ext/src/types.ts.
+// TrackingAction and the BridgePayload shape there must satisfy IngressEvent
+// below. If you change this union, update both sides.
 export type TrackingAction = 'start' | 'stop';
 export type SessionState = 'active' | 'paused' | 'archived';
-export type EventSource = 'extension' | 'desktop' | 'api' | 'manual';
+export type EventSource = 'extension' | 'api';
 
 export interface IngressEvent {
   action: TrackingAction;
@@ -31,8 +34,14 @@ export interface ActiveTicket {
   since: number | null;
 }
 
+export type IgnoredReason =
+  | 'duplicate_start'
+  | 'stop_with_no_active'
+  | 'stop_mismatched_ticket'
+  | 'stale_timestamp';
+
 export type CandadoOutcome =
   | { kind: 'started'; ticket_id: string; session: SessionRow }
   | { kind: 'stopped'; ticket_id: string; session: SessionRow }
   | { kind: 'switched'; from: string; to: string; from_session: SessionRow; to_session: SessionRow }
-  | { kind: 'ignored'; reason: string };
+  | { kind: 'ignored'; reason: IgnoredReason };
