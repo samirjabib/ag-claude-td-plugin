@@ -1,14 +1,15 @@
 "use strict";
 (() => {
-  // src/observer.ts
-  var URL_RE = /\/boards\/(\d+)\/views\/(\d+)\/pulses\/(\d+)/;
+  // src/observer.js
+  var URL_RE = /\/boards\/(\d+)(?:\/views\/(\d+))?\/pulses\/(\d+)/;
   function isTracking(button) {
     return button.classList.contains("tracking-active");
   }
   function extractTicketContext(url, doc) {
     const m = url.match(URL_RE);
-    if (!m) return null;
-    const [, board_id, view_id, ticket_id] = m;
+    if (!m)
+      return null;
+    const [, board_id, view_id = null, ticket_id] = m;
     const heading = doc.querySelector('[data-testid="editable-heading"] h2');
     const title = heading?.textContent?.trim() || null;
     return { ticket_id, board_id, view_id, url, title };
@@ -18,12 +19,14 @@
     const observer = new MutationObserver(() => {
       const current = isTracking(button);
       console.log("[TD Bridge] class mutation detected, tracking:", current, "lastState:", lastState);
-      if (current === lastState) return;
+      if (current === lastState)
+        return;
       lastState = current;
       const url = getUrl();
       const ctx = extractTicketContext(url, button.ownerDocument ?? document);
       console.log("[TD Bridge] URL:", url, "context:", ctx);
-      if (!ctx) return;
+      if (!ctx)
+        return;
       onChange({
         action: current ? "start" : "stop",
         ticket: ctx,
@@ -38,6 +41,14 @@
   var BUTTON_SELECTOR = '[data-testid="timedoctor-button"]';
   function findButton() {
     return document.querySelector(BUTTON_SELECTOR);
+  }
+  function checkAuth() {
+    return new Promise((resolve) => {
+      const msg = { type: "TD_BRIDGE_AUTH_CHECK" };
+      chrome.runtime.sendMessage(msg, (response) => {
+        resolve(response);
+      });
+    });
   }
   function send(event) {
     console.log("[TD Bridge] send event:", event.action, event.ticket.ticket_id);
@@ -81,5 +92,14 @@
     });
     docObserver.observe(document.body, { childList: true, subtree: true });
   }
-  watchForButton();
+  async function init() {
+    const auth = await checkAuth();
+    if (!auth.allowed) {
+      console.warn("[TD Bridge] inactive: email", auth.email || "(empty)", "not @arcticgrey.com");
+      return;
+    }
+    console.log("[TD Bridge] authorized:", auth.email);
+    watchForButton();
+  }
+  init();
 })();
