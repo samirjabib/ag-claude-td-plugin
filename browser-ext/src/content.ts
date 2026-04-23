@@ -1,6 +1,8 @@
 import { attachObserver } from './observer.js';
 import type { ExtensionEvent, RuntimeMessage, AuthCheckMessage, AuthCheckResponse } from './types.js';
 
+console.log('[TD Bridge] content script loaded at', new Date().toISOString(), '— document.readyState:', document.readyState);
+
 // Ordered from most-specific to least. The first match wins; the observer
 // itself is resilient to label/class renames, so the extra candidates only
 // have to locate the button, not decode its state.
@@ -91,7 +93,12 @@ function bind(button: Element): void {
 
 function watchForButton(): void {
   const existing = findButton();
-  if (existing) bind(existing);
+  if (existing) {
+    console.log('[TD Bridge] TD button already in DOM at startup');
+    bind(existing);
+  } else {
+    console.log('[TD Bridge] TD button not in DOM yet, waiting for it to appear');
+  }
 
   const docObserver = new MutationObserver(() => {
     const btn = findButton();

@@ -49,6 +49,7 @@
   }
 
   // src/content.ts
+  console.log("[TD Bridge] content script loaded at", (/* @__PURE__ */ new Date()).toISOString(), "\u2014 document.readyState:", document.readyState);
   var BUTTON_SELECTORS = [
     '[data-testid="timedoctor-button"]',
     "button.timedoctor2",
@@ -123,7 +124,12 @@
   }
   function watchForButton() {
     const existing = findButton();
-    if (existing) bind(existing);
+    if (existing) {
+      console.log("[TD Bridge] TD button already in DOM at startup");
+      bind(existing);
+    } else {
+      console.log("[TD Bridge] TD button not in DOM yet, waiting for it to appear");
+    }
     const docObserver = new MutationObserver(() => {
       const btn = findButton();
       if (btn && btn !== boundTo) bind(btn);
