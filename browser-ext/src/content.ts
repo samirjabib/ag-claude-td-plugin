@@ -82,6 +82,7 @@ function send(event: ExtensionEvent): void {
 
 let detach: (() => void) | null = null;
 let boundTo: Element | null = null;
+let routeHooksInstalled = false;
 
 function bind(button: Element): void {
   if (boundTo === button) return;
@@ -89,6 +90,38 @@ function bind(button: Element): void {
   boundTo = button;
   detach = attachObserver(button, () => location.href, send);
   console.log('[TD Bridge] observer attached to TD button');
+}
+
+function rebindForRouteChange(): void {
+  detach?.();
+  detach = null;
+  boundTo = null;
+  const button = findButton();
+  if (button) bind(button);
+}
+
+function installRouteHooks(): void {
+  if (routeHooksInstalled) return;
+  routeHooksInstalled = true;
+
+  const notify = () => {
+    window.dispatchEvent(new Event('td-bridge:navigation'));
+  };
+
+  const wrapHistoryMethod = (method: 'pushState' | 'replaceState') => {
+    const original = history[method];
+    history[method] = function (...args) {
+      const result = original.apply(this, args);
+      notify();
+      return result;
+    } as typeof history[typeof method];
+  };
+
+  wrapHistoryMethod('pushState');
+  wrapHistoryMethod('replaceState');
+  window.addEventListener('popstate', notify);
+  window.addEventListener('hashchange', notify);
+  window.addEventListener('td-bridge:navigation', rebindForRouteChange);
 }
 
 function watchForButton(): void {
@@ -114,6 +147,7 @@ async function init(): Promise<void> {
     return;
   }
   console.log('[TD Bridge] authorized as', auth.email, '— watching for TD button');
+  installRouteHooks();
   watchForButton();
 }
 

@@ -53,4 +53,17 @@ describe('Tools', () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result.length).toBe(1);
   });
+
+  it('get_ignored_stats returns aggregate ignored reasons', async () => {
+    const candado = createCandado(store);
+    candado.apply({
+      action: 'start',
+      ticket_id: '11820279584',
+      source: 'extension',
+      timestamp: 1001,
+    });
+    const tools = buildToolHandlers(store);
+    const result = await tools.get_ignored_stats();
+    expect(result).toEqual([{ reason: 'duplicate_start', count: 1 }]);
+  });
 });

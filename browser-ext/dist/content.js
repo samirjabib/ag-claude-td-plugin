@@ -2,6 +2,34 @@
 (() => {
   // src/observer.ts
   var URL_RE = /\/boards\/(\d+)(?:\/views\/(\d+))?\/pulses\/(\d+)/;
+  var BOARD_RE = /\/boards\/(\d+)(?:\/views\/(\d+))?/;
+  function attrNumber(el, names) {
+    for (const name of names) {
+      const value = el.getAttribute(name);
+      if (value && /^\d+$/.test(value)) return value;
+    }
+    return null;
+  }
+  function findTicketId(button, doc) {
+    const selectors = [
+      "[data-pulse-id]",
+      "[data-item-id]",
+      "[data-itemid]"
+    ];
+    let cursor = button;
+    while (cursor) {
+      const value = attrNumber(cursor, ["data-pulse-id", "data-item-id", "data-itemid"]);
+      if (value) return value;
+      cursor = cursor.parentElement;
+    }
+    for (const selector of selectors) {
+      const el = doc.querySelector(selector);
+      if (!el) continue;
+      const value = attrNumber(el, ["data-pulse-id", "data-item-id", "data-itemid"]);
+      if (value) return value;
+    }
+    return null;
+  }
   function isTracking(button) {
     const aria = button.getAttribute("aria-pressed");
     if (aria === "true") return true;
@@ -14,13 +42,24 @@
     }
     return button.classList.contains("tracking-active");
   }
-  function extractTicketContext(url, doc) {
+  function extractTicketContext(url, doc, button) {
     const m = url.match(URL_RE);
-    if (!m) return null;
-    const [, board_id, view_id, ticket_id] = m;
+    const boardMatch = url.match(BOARD_RE);
     const heading = doc.querySelector('[data-testid="editable-heading"] h2');
     const title = heading?.textContent?.trim() || null;
-    return { ticket_id, board_id, view_id: view_id ?? null, url, title };
+    if (m) {
+      const [, board_id, view_id, ticket_id] = m;
+      return { ticket_id, board_id, view_id: view_id ?? null, url, title };
+    }
+    const ticketId = button ? findTicketId(button, doc) : null;
+    if (!ticketId) return null;
+    return {
+      ticket_id: ticketId,
+      board_id: boardMatch?.[1] ?? null,
+      view_id: boardMatch?.[2] ?? null,
+      url,
+      title
+    };
   }
   function attachObserver(button, getUrl, onChange) {
     let lastState = isTracking(button);
@@ -53,10 +92,13 @@
         if (current === lastState) return;
         lastState = current;
         const url = getUrl();
-        const ctx = extractTicketContext(url, button.ownerDocument ?? document);
+        const ctx = extractTicketContext(url, button.ownerDocument ?? document, button);
         if (!ctx) {
-          console.warn("[TD Bridge] URL did not match /pulses/ regex:", url);
+          console.warn("[TD Bridge] could not resolve ticket context from URL or DOM:", url);
           return;
+        }
+        if (!URL_RE.test(url)) {
+          console.warn("[TD Bridge] emitting partial ticket context", ctx);
         }
         onChange({
           action: current ? "start" : "stop",
@@ -141,12 +183,40 @@
   }
   var detach = null;
   var boundTo = null;
+  var routeHooksInstalled = false;
   function bind(button) {
     if (boundTo === button) return;
     detach?.();
     boundTo = button;
     detach = attachObserver(button, () => location.href, send);
     console.log("[TD Bridge] observer attached to TD button");
+  }
+  function rebindForRouteChange() {
+    detach?.();
+    detach = null;
+    boundTo = null;
+    const button = findButton();
+    if (button) bind(button);
+  }
+  function installRouteHooks() {
+    if (routeHooksInstalled) return;
+    routeHooksInstalled = true;
+    const notify = () => {
+      window.dispatchEvent(new Event("td-bridge:navigation"));
+    };
+    const wrapHistoryMethod = (method) => {
+      const original = history[method];
+      history[method] = function(...args) {
+        const result = original.apply(this, args);
+        notify();
+        return result;
+      };
+    };
+    wrapHistoryMethod("pushState");
+    wrapHistoryMethod("replaceState");
+    window.addEventListener("popstate", notify);
+    window.addEventListener("hashchange", notify);
+    window.addEventListener("td-bridge:navigation", rebindForRouteChange);
   }
   function watchForButton() {
     const existing = findButton();
@@ -169,6 +239,7 @@
       return;
     }
     console.log("[TD Bridge] authorized as", auth.email, "\u2014 watching for TD button");
+    installRouteHooks();
     watchForButton();
   }
   init();

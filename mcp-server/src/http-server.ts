@@ -1,8 +1,10 @@
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
-import cors from '@fastify/cors';
+import { randomUUID } from 'node:crypto';
 import type { IngressEvent, SessionRow } from './types.js';
 import type { Store } from './store.js';
+import type { Logger } from './logger.js';
+import type { Metrics } from './metrics.js';
 
 export type IngestHandler = (event: IngressEvent) => void;
 
@@ -44,23 +46,63 @@ const eventSchema = {
   },
 } as const;
 
-export function buildHttpServer(onEvent: IngestHandler, store: Store): FastifyInstance {
+export function buildHttpServer(
+  onEvent: IngestHandler,
+  store: Store,
+  logger: Logger,
+  metrics: Metrics,
+): FastifyInstance {
   const app = Fastify({ logger: false, bodyLimit: 2048 });
-
-  void app.register(cors, {
-    origin: true,
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['content-type'],
-  });
 
   app.get('/health', async () => ({ ok: true }));
 
   app.get('/active', async () => getActiveSnapshot(store));
 
+  app.get('/metrics', async () => metrics.snapshot());
+
   app.post('/event', { schema: { body: eventSchema } }, async (req, reply) => {
-    const event = req.body as IngressEvent;
+    const requestId = typeof req.headers['x-request-id'] === 'string'
+      ? req.headers['x-request-id']
+      : randomUUID();
+    const event = {
+      ...(req.body as IngressEvent),
+      request_id: requestId,
+    };
+    logger.info('http_event_accepted', {
+      request_id: requestId,
+      ticket_id: event.ticket_id,
+      action: event.action,
+      source: event.source,
+    });
+    metrics.recordAcceptedRequest();
     onEvent(event);
     return reply.code(202).send({ accepted: true });
+  });
+
+  app.setErrorHandler(async (err, req, reply) => {
+    const requestId = typeof req.headers['x-request-id'] === 'string'
+      ? req.headers['x-request-id']
+      : randomUUID();
+    const statusCode =
+      typeof err === 'object' && err && 'statusCode' in err && typeof err.statusCode === 'number'
+        ? err.statusCode
+        : 500;
+    const message =
+      typeof err === 'object' && err && 'message' in err && typeof err.message === 'string'
+        ? err.message
+        : 'unknown error';
+    metrics.recordRejectedRequest();
+    logger.warn('http_request_rejected', {
+      request_id: requestId,
+      method: req.method,
+      url: req.url,
+      status_code: statusCode,
+      error: message,
+    });
+    return reply.status(statusCode).send({
+      error: message,
+      request_id: requestId,
+    });
   });
 
   return app;

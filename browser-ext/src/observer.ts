@@ -6,6 +6,39 @@ import type { ExtensionEvent, TicketContext } from './types.js';
 // The view segment is optional; capture it when present so we can still
 // link back to the exact view the user was in.
 const URL_RE = /\/boards\/(\d+)(?:\/views\/(\d+))?\/pulses\/(\d+)/;
+const BOARD_RE = /\/boards\/(\d+)(?:\/views\/(\d+))?/;
+
+function attrNumber(el: Element, names: string[]): string | null {
+  for (const name of names) {
+    const value = el.getAttribute(name);
+    if (value && /^\d+$/.test(value)) return value;
+  }
+  return null;
+}
+
+function findTicketId(button: Element, doc: Document): string | null {
+  const selectors = [
+    '[data-pulse-id]',
+    '[data-item-id]',
+    '[data-itemid]',
+  ];
+
+  let cursor: Element | null = button;
+  while (cursor) {
+    const value = attrNumber(cursor, ['data-pulse-id', 'data-item-id', 'data-itemid']);
+    if (value) return value;
+    cursor = cursor.parentElement;
+  }
+
+  for (const selector of selectors) {
+    const el = doc.querySelector(selector);
+    if (!el) continue;
+    const value = attrNumber(el, ['data-pulse-id', 'data-item-id', 'data-itemid']);
+    if (value) return value;
+  }
+
+  return null;
+}
 
 // Detection with multiple fallbacks so a TD UI refresh doesn't silently
 // disable us. Priority: explicit state attributes first, then the legacy
@@ -25,13 +58,26 @@ export function isTracking(button: Element): boolean {
   return button.classList.contains('tracking-active');
 }
 
-export function extractTicketContext(url: string, doc: Document): TicketContext | null {
+export function extractTicketContext(url: string, doc: Document, button?: Element): TicketContext | null {
   const m = url.match(URL_RE);
-  if (!m) return null;
-  const [, board_id, view_id, ticket_id] = m;
+  const boardMatch = url.match(BOARD_RE);
   const heading = doc.querySelector('[data-testid="editable-heading"] h2');
   const title = heading?.textContent?.trim() || null;
-  return { ticket_id, board_id, view_id: view_id ?? null, url, title };
+  if (m) {
+    const [, board_id, view_id, ticket_id] = m;
+    return { ticket_id, board_id, view_id: view_id ?? null, url, title };
+  }
+
+  const ticketId = button ? findTicketId(button, doc) : null;
+  if (!ticketId) return null;
+
+  return {
+    ticket_id: ticketId,
+    board_id: boardMatch?.[1] ?? null,
+    view_id: boardMatch?.[2] ?? null,
+    url,
+    title,
+  };
 }
 
 export type ObserverCallback = (event: ExtensionEvent) => void;
@@ -63,10 +109,13 @@ export function attachObserver(
       if (current === lastState) return;
       lastState = current;
       const url = getUrl();
-      const ctx = extractTicketContext(url, button.ownerDocument ?? document);
+      const ctx = extractTicketContext(url, button.ownerDocument ?? document, button);
       if (!ctx) {
-        console.warn('[TD Bridge] URL did not match /pulses/ regex:', url);
+        console.warn('[TD Bridge] could not resolve ticket context from URL or DOM:', url);
         return;
+      }
+      if (!URL_RE.test(url)) {
+        console.warn('[TD Bridge] emitting partial ticket context', ctx);
       }
       onChange({
         action: current ? 'start' : 'stop',

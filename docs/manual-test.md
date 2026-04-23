@@ -28,8 +28,10 @@ TD_BRIDGE_DB=/tmp/td-bridge-manual.db npx -y @modelcontextprotocol/inspector nod
 ```
 
 Leave the Inspector running. The HTTP ingest is now listening on
-`http://127.0.0.1:47821`. (For real Claude Code / Claude Desktop usage the
-client itself is the stdio peer — see the integration steps in a later phase.)
+`http://127.0.0.1:47821` unless that port is already taken. On collision the
+bridge will scan forward up to `47831`, and the browser extension will follow
+that fallback range automatically. (For real Claude Code / Claude Desktop usage
+the client itself is the stdio peer.)
 
 ### 3. Verify health
 
@@ -37,9 +39,12 @@ In another terminal:
 
 ```bash
 curl -s http://127.0.0.1:47821/health
+curl -s http://127.0.0.1:47821/metrics
 ```
 
 Expected: `{"ok":true}`
+Expected metrics: JSON with `queue.depth`, `lock_wait_ms`, and
+`handler_duration_ms`.
 
 ### 4. Load the browser extension
 
@@ -61,6 +66,8 @@ Inspect the SW directly:
 3. In that DevTools, open **Network**. Leave it open.
 4. Switch to the Monday.com tab and navigate to a ticket page (URL contains
    `/pulses/<ID>`).
+   Note: the content script now runs in all frames, so Time Doctor widgets
+   rendered inside iframes are also observed.
 5. Click the "Start Timer" button injected by Time Doctor.
 6. In the SW DevTools Network tab, you should see a POST to
    `http://127.0.0.1:47821/event` returning 202.

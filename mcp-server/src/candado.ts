@@ -6,12 +6,19 @@ export interface Candado {
   apply(event: IngressEvent): CandadoOutcome;
 }
 
-export function createCandado(store: Store): Candado {
+export interface CandadoOptions {
+  staleToleranceMs?: number;
+  onLockWait?: (waitMs: number) => void;
+}
+
+export function createCandado(store: Store, options: CandadoOptions = {}): Candado {
+  const staleToleranceMs = options.staleToleranceMs ?? 0;
+
   return {
     apply(event) {
       // Atomic: record event + state mutation must commit or roll back together.
       return store.transaction(() => {
-        store.recordEvent(
+        const eventId = store.recordEvent(
           event.ticket_id,
           event.action,
           event.source,
@@ -26,13 +33,15 @@ export function createCandado(store: Store): Candado {
         if (
           active.ticket_id !== null &&
           active.since !== null &&
-          event.timestamp < active.since
+          event.timestamp < active.since - staleToleranceMs
         ) {
+          store.setEventReason(eventId, 'stale_timestamp');
           return { kind: 'ignored', reason: 'stale_timestamp' };
         }
 
         if (event.action === 'start') {
           if (active.ticket_id === event.ticket_id) {
+            store.setEventReason(eventId, 'duplicate_start');
             return { kind: 'ignored', reason: 'duplicate_start' };
           }
           if (active.ticket_id !== null) {
@@ -54,15 +63,17 @@ export function createCandado(store: Store): Candado {
 
         // action === 'stop'
         if (active.ticket_id === null) {
+          store.setEventReason(eventId, 'stop_with_no_active');
           return { kind: 'ignored', reason: 'stop_with_no_active' };
         }
         if (active.ticket_id !== event.ticket_id) {
+          store.setEventReason(eventId, 'stop_mismatched_ticket');
           return { kind: 'ignored', reason: 'stop_mismatched_ticket' };
         }
         const session = pauseSession(store, active.ticket_id, event.timestamp);
         store.clearActiveTicket();
         return { kind: 'stopped', ticket_id: event.ticket_id, session };
-      });
+      }, { mode: 'immediate', onLockAcquired: options.onLockWait });
     },
   };
 }

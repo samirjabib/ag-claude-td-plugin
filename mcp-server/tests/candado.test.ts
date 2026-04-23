@@ -91,4 +91,10 @@ describe('Candado', () => {
       'stop:T1:1500',
     ]);
   });
+
+  it('persists ignored reasons when stale timestamps are rejected', () => {
+    candado.apply(evt({ action: 'start', ticket_id: 'T1', timestamp: 5000 }));
+    candado.apply(evt({ action: 'stop', ticket_id: 'T1', timestamp: 4000 }));
+    expect(store.listEvents().at(-1)).toMatchObject({ reason: 'stale_timestamp' });
+  });
 });

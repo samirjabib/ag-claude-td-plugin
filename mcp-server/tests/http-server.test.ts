@@ -2,10 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { buildHttpServer } from '../src/http-server.js';
 import { createStore } from '../src/store.js';
 import type { IngressEvent } from '../src/types.js';
+import { createLogger } from '../src/logger.js';
+import { createMetrics } from '../src/metrics.js';
 
 function build(onEvent: (e: IngressEvent) => void = () => {}) {
   const store = createStore(':memory:');
-  const app = buildHttpServer(onEvent, store);
+  const app = buildHttpServer(onEvent, store, createLogger({ test: 'http-server' }), createMetrics());
   return { app, store };
 }
 
@@ -94,4 +96,44 @@ describe('HTTP server', () => {
     await app.close();
   });
 
+  it('POST /event rejects malformed JSON with request_id payload', async () => {
+    const { app } = build();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/event',
+      headers: { 'content-type': 'application/json' },
+      payload: '{"action":"start"',
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body)).toMatchObject({
+      error: expect.any(String),
+      request_id: expect.any(String),
+    });
+    await app.close();
+  });
+
+  it('does not emit permissive CORS headers', async () => {
+    const { app } = build();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/event',
+      headers: { origin: 'https://evil.example' },
+      payload: { action: 'start', ticket_id: 'X', source: 'extension', timestamp: 0 },
+    });
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
+    await app.close();
+  });
+
+  it('GET /metrics exposes queue and handler summaries', async () => {
+    const { app } = build();
+    const res = await app.inject({ method: 'GET', url: '/metrics' });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toMatchObject({
+      http: expect.any(Object),
+      queue: { depth: 0 },
+      handler_duration_ms: expect.any(Object),
+      lock_wait_ms: expect.any(Object),
+    });
+    await app.close();
+  });
 });

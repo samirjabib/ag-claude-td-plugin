@@ -1,7 +1,8 @@
+import { createBridgeClient } from './bridge-client.js';
 import type { RuntimeMessage, AuthCheckResponse } from './types.js';
 
-const BRIDGE_URL = 'http://127.0.0.1:47821/event';
 const ALLOWED_DOMAIN = '@arcticgrey.com';
+const RETRY_ALARM = 'td_bridge_retry_queue';
 
 function getProfileEmail(): Promise<string> {
   return new Promise((resolve) => {
@@ -15,24 +16,10 @@ function isAllowed(email: string): boolean {
   return email.endsWith(ALLOWED_DOMAIN);
 }
 
-async function forward(payload: unknown): Promise<{ ok: boolean; status?: number; error?: string }> {
-  try {
-    const res = await fetch(BRIDGE_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      console.warn('[td-bridge] bridge replied', res.status);
-      return { ok: false, status: res.status };
-    }
-    console.log('[td-bridge] forwarded event → 202');
-    return { ok: true, status: res.status };
-  } catch (err) {
-    console.warn('[td-bridge] could not reach bridge:', err);
-    return { ok: false, error: String(err) };
-  }
-}
+const bridge = createBridgeClient({
+  storage: chrome.storage.local,
+  alarms: chrome.alarms,
+});
 
 chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse) => {
   if (msg?.type === 'TD_BRIDGE_AUTH_CHECK') {
@@ -55,7 +42,7 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
         sendResponse({ ok: false, error: 'unauthorized' });
         return;
       }
-      const result = await forward(msg.payload);
+      const result = await bridge.forwardOrQueue(msg.payload);
       sendResponse(result);
     })();
     return true;
@@ -63,3 +50,10 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
 
   return false;
 });
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== RETRY_ALARM) return;
+  void bridge.flushQueue();
+});
+
+void bridge.flushQueue();

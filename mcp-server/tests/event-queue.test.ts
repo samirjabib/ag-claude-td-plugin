@@ -67,6 +67,19 @@ describe('EventQueue', () => {
     expect(seen).toEqual(['start:T1:1000', 'start:T1:42']);
   });
 
+  it('keeps distinct metadata variants inside the dedup window', async () => {
+    const seen: string[] = [];
+    const queue = createEventQueue(async (e) => {
+      seen.push(`${e.ticket_id}:${e.metadata?.title ?? 'untitled'}`);
+    });
+
+    queue.enqueue(evt({ ticket_id: 'T1', metadata: { title: 'First' } }));
+    queue.enqueue(evt({ ticket_id: 'T1', metadata: { title: 'Second' } }));
+    await queue.drain();
+
+    expect(seen).toEqual(['T1:First', 'T1:Second']);
+  });
+
   it('keeps the loop alive when a handler throws', async () => {
     const seen: string[] = [];
     const errors: unknown[] = [];
